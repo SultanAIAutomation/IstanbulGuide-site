@@ -1,0 +1,79 @@
+'use strict';
+(() => {
+  const get=id=>document.getElementById(id);
+  const agents={orchestrator:'المنسّق',flights:'الطيران',hotels:'السكن',attractions:'المزارات',route:'المسار',budget:'الميزانية',critic:'المراجع'};
+  const states={started:'جارٍ العمل',complete:'اكتمل',estimate:'تقدير',ok:'بيانات مخزنة',no_data:'لا توجد بيانات',error:'تعذر',pass:'اجتاز',warnings:'ملاحظات',unavailable:'غير متاح',revision:'إعادة مراجعة',rejected:'مستبعد'};
+  const labels={flights:'الطيران',stay:'الإقامة',food:'الطعام',transport:'النقل والتحويلات',attractions:'تذاكر المزارات المجدولة',extras:'إضافات',fx_fee:'رسوم الصرف',reserve:'الاحتياطي'};
+  const nf=new Intl.NumberFormat('ar-SA',{maximumFractionDigits:2});
+  let lastResult=null;
+  function node(tag,text,parent,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text);if(className)el.className=className;if(parent)parent.append(el);return el;}
+  function source(meta){if(!meta)return 'مصدر غير متاح · غير متحقق';const freshness={cached:'مخزن',estimate:'تقدير',derived:'حساب حتمي / تقدير', 'user-entered':'إدخال المستخدم'};return [meta.source,freshness[meta.freshness]||'غير متحقق',meta.fetched_at?'جُلب: '+meta.fetched_at:'لم يُجلب سعر حي',meta.last_verified?'آخر تحقق: '+meta.last_verified:'آخر تحقق: غير متحقق'].join(' · ');}
+  function amount(m){return m?.SAR===null||!Number.isFinite(m?.SAR)?'غير مكتمل':nf.format(m.SAR)+' ر.س / '+nf.format(m.TRY)+' ل.ت';}
+  const hosts=new Set(['www.google.com','www.saudia.com','www.turkishairlines.com','www.flypgs.com','www.booking.com','muze.gov.tr','visit.istanbul','www.millisaraylar.gov.tr','yerebatan.com','miniaturk.com.tr','www.rmk-museum.org.tr','istanbulakvaryum.com','sehirhatlari.istanbul']);
+  function link(parent,label,url){try{const parsed=new URL(url);if(parsed.protocol!=='https:'||!hosts.has(parsed.hostname)||parsed.username||parsed.password)return;const a=node('a',label,parent,'text-link');a.href=parsed.href;a.target='_blank';a.rel='noopener noreferrer';}catch{}}
+  function render(result){
+    if(!result||result.version!==1||!Array.isArray(result.plans)||!result.plans.length||result.plans.length>3||!Array.isArray(result.agents_report)||!result.flights)throw Error('invalid_result');
+    const root=document.createElement('div');
+    node('p','النتيجة بتاريخ '+result.generated_at+' · '+source(result.numeric_evidence),root,'field-hint');
+    node('p','المسافرون: '+result.input_summary.adults+' بالغ، '+result.input_summary.children+' طفل، '+result.input_summary.infants+' رضيع · الغرف: '+result.input_summary.rooms+' · المصدر: مدخلات المستخدم وقت الطلب. التواريخ أدناه من طلبك.',root,'field-hint');
+    for(const plan of result.plans){
+      const article=node('article',undefined,root,'generated-plan');node('h3',plan.name,article);
+      node('p','الإجمالي: '+amount(plan.budget.total),article,'generated-total');node('small',source(plan.budget.total.evidence),article);
+      if(!plan.budget.complete)node('p','المجموع المتاح فقط: '+amount(plan.budget.known_total)+' · '+source(plan.budget.known_total.evidence),article,'info');
+      node('p','الهدف: '+amount(plan.budget.target)+' · '+source(plan.budget.target.evidence),article,'field-hint');
+      if(plan.budget.difference)node('p','الفرق عن الهدف: '+amount(plan.budget.difference)+' · '+source(plan.budget.difference.evidence),article,'field-hint');
+      node('p','درجة القيمة '+nf.format(plan.value_score)+(plan.budget.complete?'':' (أولية)')+' · حساب حتمي من التغطية والتكلفة والتنقل وعدم التحقق · '+result.generated_at,article,'field-hint');
+      const table=node('table',undefined,article,'generated-costs');node('caption','تفصيل التكاليف ومصادرها',table);const head=node('tr',undefined,node('thead',undefined,table));for(const title of ['البند','SAR / TRY','المصدر والحداثة']){const th=node('th',title,head);th.scope='col';}
+      const tbody=node('tbody',undefined,table);for(const [key,m] of Object.entries(plan.budget.components)){const row=node('tr',undefined,tbody);const th=node('th',labels[key]||key,row);th.scope='row';node('td',amount(m),row);node('td',source(m.evidence),row);}
+      node('p','الصرف: '+nf.format(plan.budget.exchange_rate)+' ليرة لكل ريال · '+source(plan.budget.fx),article,'field-hint');
+      node('p','رسوم الصرف '+nf.format(plan.budget.fx_fee_percent)+'% والاحتياطي '+nf.format(plan.budget.reserve_percent)+'% · مدخلات المستخدم وقت الطلب؛ محسوبة حتمياً.',article,'field-hint');
+      node('h4','السكن: '+plan.hotel.name_ar,article);node('p','نطاق الغرفة / الليلة: '+plan.hotel.band_sar.map(n=>nf.format(n)).join(' – ')+' ر.س / '+plan.hotel.band_sar.map(n=>nf.format(Math.round(n*plan.budget.exchange_rate*100)/100)).join(' – ')+' ل.ت · '+source(plan.hotel.evidence),article,'field-hint');
+      node('p','المتوسط المستخدم '+nf.format(plan.hotel.nightly_sar)+' ر.س · تقدير تحريري غير متحقق، فئة '+({economy:'اقتصادية',balanced:'متوسطة',comfortable:'مريحة'}[plan.hotel.class]||'')+' · '+({low:'موسم منخفض',mid:'موسم متوسط',peak:'موسم ذروة'}[plan.hotel.season]||'')+' · السعة والضرائب غير مؤكدة.',article,'field-hint');link(article,'التحقق من أسعار السكن ↗',plan.hotel.url);
+      node('h4','البرنامج اليومي',article);
+      for(const day of plan.route.days){const box=node('div',undefined,article,'generated-day');node('h4',day.date,box);node('p',day.stops.length?day.stops.map(s=>s.name_ar).join(' ← '):'وصول / عودة أو وقت حر للراحة',box);node('small','الزيارة '+day.visit_min+' دقيقة · التنقل '+day.transit_min+' دقيقة · المشي '+day.walk_km+' كم · تقدير حتمي من إحداثيات ومدد غير متحققة في الدليل، لا يشمل الزحام أو الانتظار · '+result.generated_at,box);for(const stop of day.stops){node('p',stop.name_ar+' · '+stop.duration_min+' دقيقة · تذكرة فرد تقديرية '+nf.format(stop.ticket_try)+' ل.ت / '+nf.format(Math.round(stop.ticket_try/plan.budget.exchange_rate*100)/100)+' ر.س · المصدر: الدليل التحريري × الصرف أعلاه · '+(stop.verified?'متحقق':'غير متحقق')+' · آخر تحقق: '+(stop.last_verified||'غير متاح'),box,'field-hint');link(box,'المصدر الرسمي: '+stop.name_ar+' ↗',stop.official_url);}}
+      if(plan.unscheduled.length)node('p','لم تُجدول ولم تُحسب تذاكر: '+plan.unscheduled.map(s=>s.name_ar).join('، '),article,'info');
+      node('h4','لماذا هذه الخطة؟',article);const why=node('ul',undefined,article);for(const reason of plan.why)node('li',reason,why);
+      const warnings=node('ul',undefined,article,'generated-warnings');for(const warning of plan.warnings)node('li',warning,warnings);
+    }
+    const flights=node('section',undefined,root,'generated-plan');node('h3','بيانات الطيران: '+({ok:'متاحة مخزنة',no_data:'لا توجد بيانات',error:'تعذر البحث'}[result.flights.status]||'غير متاحة'),flights);
+    node('p','الخيارات وتقويم الأرخص أدناه للبالغ، وقد تختلف تواريخ البدائل؛ راجعها قبل الحجز. السعر مخزن وليس عرضاً حياً.',flights);
+    for(const item of result.flights.options){node('p','MED → '+item.airport+' · '+item.departure+' إلى '+item.returnDate+' · '+nf.format(item.price_sar)+' ر.س / '+nf.format(Math.round(item.price_sar*result.plans[0].budget.exchange_rate*100)/100)+' ل.ت · المصدر '+item.source+' · مخزن · ثقة '+item.confidence+' · جُلب '+item.fetched_at+' · رُصد لدى المزود '+(item.found_at||'غير معروف'),flights,'field-hint');for(const l of item.links||[])link(flights,l.label+' ↗',l.url);}
+    if(result.flights.calendar.length){const details=node('details',undefined,flights);node('summary','تقويم أرخص النتائج المخزنة ضمن المرونة',details);for(const item of result.flights.calendar)node('p',item.departure+' / '+item.returnDate+' · '+item.airport+' · '+nf.format(item.price_sar)+' ر.س · Travelpayouts مخزن، غير متحقق · جُلب '+item.fetched_at,details,'field-hint');}
+    for(const l of result.flights.links)link(flights,l.label+' ↗',l.url);
+    const report=node('details',undefined,root,'advanced');report.open=true;node('summary','تقرير الوكلاء',report);for(const r of result.agents_report){node('p',(agents[r.agent]||r.agent)+' · '+(states[r.status]||r.status)+' — '+r.detail,report);if(r.diagnostics?.length){const details=node('details',undefined,report);node('summary','تفاصيل التشخيص',details);node('pre',JSON.stringify(r.diagnostics,null,2),details);}}
+    node('p','مكالمات المراجع: '+result.llm_calls+' · المصدر: عداد الخدمة وقت الطلب '+result.generated_at,report,'field-hint');
+    if(result.affiliate_disclosure)node('p',result.affiliate_disclosure,root,'info');
+    get('generatedResults').replaceChildren(root);lastResult=result;get('exportGenerated').hidden=false;
+  }
+  function progress(record){const row=get('agent-'+record.agent);if(row)row.textContent=(agents[record.agent]||record.agent)+' · '+(states[record.status]||record.status)+' — '+record.detail;}
+  async function stream(response){
+    if(!response.headers.get('Content-Type')?.includes('text/event-stream')){render(await response.json());return;}
+    const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',size=0,doneResult=false;
+    try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>2000000)throw Error('large_response');buffer+=decoder.decode(value,{stream:true});let end;while((end=buffer.indexOf('\n\n'))!==-1){const frame=buffer.slice(0,end);buffer=buffer.slice(end+2);const type=frame.match(/^event: (.+)$/m)?.[1],payload=frame.match(/^data: (.+)$/m)?.[1];if(!payload)continue;const data=JSON.parse(payload);if(type==='progress')progress(data);if(type==='result'){render(data);doneResult=true;}if(type==='error')throw Error('backend_error');}}if(!doneResult)throw Error('incomplete_stream');}finally{await reader.cancel().catch(()=>{});}
+  }
+  async function generate(event){
+    event.preventDefault();const form=get('generateForm');if(!form.reportValidity())return;
+    const notice=get('generatorNotice');notice.textContent='جارٍ البحث والتحقق…';get('generatePlan').disabled=true;get('generatedResults').replaceChildren();get('exportGenerated').hidden=true;lastResult=null;
+    for(const agent of Object.keys(agents))get('agent-'+agent).textContent=agents[agent]+' · بانتظار';
+    let timer;const controller=new AbortController();
+    try{
+      const url=new URL(window.ISTANBUL_PLANNER_URL);if(url.protocol!=='https:' || url.pathname!=='/plan' || url.username || url.password)throw Error('configuration');
+      const value=id=>Number(get(id).value), children=value('genChildren'),infants=value('genInfants'),adults=value('genTravelers')-children-infants;
+      if(adults<1 || infants>adults)throw Error('travelers');
+      const fields={departure:get('genDeparture').value,returnDate:get('genReturn').value,adults,children,infants,rooms:value('genRooms'),pace:get('genPace').value,targetBudget:value('genBudget'),exchangeRate:value('exchangeRate'),fxSource:typeof fxMeta!=='undefined'&&fxMeta?.source==='api'?'cached':'user-entered',fxFetchedAt:typeof fxMeta!=='undefined'&&fxMeta?.source==='api'?new Date(fxMeta.updated*1000).toISOString():null,nonstopOnly:get('genNonstop').checked,flexible:get('genFlexible').checked,manualFlightTotal:get('genFlight').value===''?null:value('genFlight'),selected:[...form.querySelectorAll('[data-gen-place]:checked')].map(el=>el.value),foodDaily:value('genFood'),transportDaily:value('genTransport'),transfers:value('genTransfers'),extras:value('genExtras'),fxFee:value('genFxFee'),reserve:value('genReserve')};
+      if(!(fields.exchangeRate>0))throw Error('fx');
+      timer=setTimeout(()=>controller.abort(),50000);
+      const response=await fetch(url.href,{method:'POST',headers:{'Content-Type':'application/json','Accept':'text/event-stream'},body:JSON.stringify(fields),signal:controller.signal,credentials:'omit'});
+      if(!response.ok)throw Error('http_'+response.status);await stream(response);notice.textContent='اكتمل التوليد. راجع المصادر والتحذيرات قبل تثبيت الحجز.';
+    }catch(error){notice.textContent=error.message==='travelers'?'راجع عدد الأطفال والرضع؛ يجب وجود بالغ، والرضع لا يتجاوزون البالغين. الحاسبة اليدوية متاحة أدناه.':error.message==='fx'?'أدخل سعر صرف صحيحاً في لوحة الريال والليرة أو حدّثه. الحاسبة اليدوية متاحة أدناه.':'تعذر توليد الخطة أو لم تُضبط الخدمة بعد. تابع بالحاسبة اليدوية أدناه؛ خططك المحفوظة متاحة.';}finally{clearTimeout(timer);controller.abort();get('generatePlan').disabled=false;}
+  }
+  const choices=get('genInterests');
+  if(typeof places!=='undefined')for(const place of places){const label=node('label',undefined,choices,'inline-check');const checkbox=node('input',undefined,label);checkbox.type='checkbox';checkbox.value=place.id;checkbox.setAttribute('data-gen-place','');checkbox.checked=['sultan','topkapi','galata'].includes(place.id);label.append(document.createTextNode(' '+place.name));}
+  get('genDeparture').value=get('departure').value;get('genReturn').value=get('returnDate').value;get('genDeparture').min=get('departure').min;
+  get('genDeparture').addEventListener('change',()=>get('genReturn').min=get('genDeparture').value);
+  get('generateForm').addEventListener('submit',generate);
+  get('generateForm').addEventListener('invalid',event=>{const details=event.target.closest('details');if(details)details.open=true;},true);
+  get('exportGenerated').addEventListener('click',()=>{if(!lastResult)return;const url=URL.createObjectURL(new Blob([JSON.stringify(lastResult,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='istanbul-agent-plans.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+  // Testable API; no secrets or raw HTML rendering.
+  window.IstanbulPlanner={render,generate,source};
+})();

@@ -14,6 +14,9 @@
   <script src="assets/js/library.js?v=hotels-1" defer></script>
   <script src="assets/js/hotels.js" defer></script>
   <script src="assets/js/app.js?v=hotels-1" defer></script>
+  <link rel="stylesheet" href="assets/css/planner.css">
+  <script src="assets/js/config.js" defer></script>
+  <script src="assets/js/planner.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#trip">انتقل إلى تخطيط الرحلة</a>
@@ -29,6 +32,27 @@
   <div class="nav-wrap no-print"><nav class="nav" aria-label="أقسام مخطط الرحلة"><a href="#trip" class="active">01 تفاصيل الرحلة</a><a href="#hotels">الفنادق ومناطق السكن</a><a href="#budget">02 الميزانية</a><a href="#places">03 المزارات والجولات</a><a href="#itinerary">04 البرنامج اليومي</a><a href="#guide">05 دليل التوفير</a><a href="#plans">06 خططي</a></nav></div>
   <main class="layout" id="main">
     <div class="stack">
+      <section class="panel" id="generator" aria-labelledby="generatorTitle">
+        <div class="section-head"><span class="step" aria-hidden="true">✦</span><div><h2 id="generatorTitle">خطة بقيمة أفضل</h2><small>بحث مخزن للطيران، تقديرات واضحة للسكن، ومسار يراجع أيامك.</small></div></div>
+        <p class="generator-intro field-hint">أجب عن أربعة أسئلة. تُستخدم لوحة الصرف لتحديث SAR/TRY تلقائياً؛ إن تعذر الاتصال أدخل السعر هناك. نتائج التوليد تظهر هنا، والحاسبة اليدوية وخططك المحفوظة أدناه. لا تمثل النتائج حجوزات.</p>
+        <form id="generateForm" class="generator-form">
+          <fieldset><legend>متى تسافر؟</legend><div class="grid2"><div><label for="genDeparture">الذهاب</label><input id="genDeparture" type="date" required></div><div><label for="genReturn">العودة</label><input id="genReturn" type="date" required></div></div></fieldset>
+          <div class="grid3"><div><label for="genTravelers">كم مسافراً؟ (يشمل الأطفال والرضع)</label><input id="genTravelers" type="number" min="1" max="20" step="1" value="2" required></div><div><label for="genBudget">الميزانية المستهدفة للمجموعة (ر.س)</label><input id="genBudget" type="number" min="1" max="1000000" step="0.01" value="10000" required></div><div><label for="genPace">كيف تفضل الوتيرة؟</label><select id="genPace"><option value="relaxed">مريحة</option><option value="active">نشطة</option></select></div></div>
+          <details class="advanced"><summary>خيارات متقدمة<span>فئات المسافرين والغرف والطيران والاهتمامات وافتراضات المصروف</span></summary><div class="details-body">
+            <div class="grid3"><div><label for="genChildren">الأطفال من إجمالي المسافرين</label><input id="genChildren" type="number" min="0" max="12" step="1" value="0" required></div><div><label for="genInfants">الرضع من الإجمالي</label><input id="genInfants" type="number" min="0" max="6" step="1" value="0" required></div><div><label for="genRooms">الغرف (تحقق من السعة)</label><input id="genRooms" type="number" min="1" max="12" step="1" value="1" required></div></div>
+            <label class="inline-check"><input id="genNonstop" type="checkbox" checked> بدون توقف فقط في الاتجاهين</label><label class="inline-check"><input id="genFlexible" type="checkbox" checked> مرونة ثلاثة أيام قبل وبعد الموعد</label>
+            <div><label for="genFlight">تكلفة طيران المجموعة ذهاباً وعودة بالريال (اختياري)</label><input id="genFlight" type="number" min="0" max="1000000" step="0.01" placeholder="اتركه فارغاً إن لم تعرف"><p class="field-hint">إدخال مستخدم وقت الطلب. لا يُفترض سعر مجموعة أو خصم أطفال من سعر بالغ مخزن.</p></div>
+            <div class="grid2"><div><label for="genFood">طعام الفرد يومياً (ر.س، تقدير)</label><input id="genFood" type="number" min="0" max="10000" step="0.01" value="90" required></div><div><label for="genTransport">نقل الفرد يومياً (ر.س، تقدير)</label><input id="genTransport" type="number" min="0" max="10000" step="0.01" value="25" required></div><div><label for="genTransfers">تحويلات المطار للمجموعة (ر.س، تقدير)</label><input id="genTransfers" type="number" min="0" max="100000" step="0.01" value="300" required></div><div><label for="genExtras">كل الإضافات الأخرى للمجموعة (ر.س)</label><input id="genExtras" type="number" min="0" max="100000" step="0.01" value="0" required></div><div><label for="genFxFee">رسوم الصرف (%)</label><input id="genFxFee" type="number" min="0" max="20" step="0.01" value="3" required></div><div><label for="genReserve">الاحتياطي (%)</label><input id="genReserve" type="number" min="0" max="50" step="0.01" value="10" required></div></div>
+            <fieldset><legend>اهتماماتك</legend><div id="genInterests" class="generator-interests"></div></fieldset>
+            <p class="field-hint">كل افتراض أعلاه تقدير أو إدخال مستخدم وقت الطلب، وليس سعراً حياً. أدخل التأشيرات والتأمين والأمتعة وتكلفة الرضع والإنترنت والتسوق ضمن الإضافات عند الحاجة.</p>
+          </div></details>
+          <button class="button primary" type="submit" id="generatePlan">ولّد لي أفضل خطة</button>
+        </form>
+        <p id="generatorNotice" class="info" role="status" aria-live="polite">التقديرات تحتاج تحققاً قبل الحجز. الحاسبة اليدوية متاحة دائماً أدناه.</p>
+        <div class="generator-progress no-print" aria-label="تقدم الوكلاء" aria-live="polite"><p id="agent-orchestrator">المنسّق · بانتظار</p><p id="agent-flights">الطيران · بانتظار</p><p id="agent-hotels">السكن · بانتظار</p><p id="agent-attractions">المزارات · بانتظار</p><p id="agent-route">المسار · بانتظار</p><p id="agent-budget">الميزانية · بانتظار</p><p id="agent-critic">المراجع · بانتظار</p></div>
+        <button id="exportGenerated" class="button no-print space" type="button" hidden>تنزيل نتائج الوكلاء JSON</button>
+        <div id="generatedResults" aria-live="polite"></div>
+      </section>
       <section class="panel" id="trip"><div class="section-head"><span class="step">01</span><div><h2>رحلتك تبدأ من هنا</h2><small>اختر تواريخك، ودع التفاصيل تتضح.</small></div></div>
         <div class="grid2"><div><label for="departure">الذهاب من المدينة المنورة</label><input id="departure" type="date" data-save></div><div><label for="returnDate">العودة من إسطنبول</label><input id="returnDate" type="date" data-save></div></div>
         <p id="dateError" class="error" role="alert"></p>
