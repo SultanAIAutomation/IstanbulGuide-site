@@ -130,7 +130,7 @@ async function importCurrentPlan(file) {
       clone.readOnly = false;
       if (clone.type === 'date') clone.removeAttribute('min');
       clone.value = String(value);
-      const optionalEmptyRate = id === 'exchangeRate' && value === '' && plan.snapshot.fields.costCurrency !== 'TRY';
+      const optionalEmptyRate = value === '' && ((id === 'exchangeRate' && plan.snapshot.fields.costCurrency !== 'TRY') || id === 'selectedHotel' || id.startsWith('hotelquote-'));
       if ((!clone.value && !optionalEmptyRate) || !clone.checkValidity()) throw new Error('يحتوي الملف على قيمة غير صحيحة في «' + id + '».');
     }
     restored = true;
