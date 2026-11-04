@@ -1,9 +1,9 @@
-/* Local files are supplied by the project owner and excluded from version control. */
-@font-face{font-family:Thmanyah;src:local('thmanyah sans Regular'),local('thmanyahsans-Regular');font-weight:400;font-display:swap}
-@font-face{font-family:Thmanyah;src:local('thmanyah sans Medium'),local('thmanyahsans-Medium');font-weight:500 600;font-display:swap}
-@font-face{font-family:Thmanyah;src:local('thmanyah sans Bold'),local('thmanyahsans-Bold');font-weight:700 800;font-display:swap}
-@font-face{font-family:Thmanyah;src:local('thmanyah sans Black'),local('thmanyahsans-Black');font-weight:900;font-display:swap}
-@font-face{font-family:'Thmanyah Display';src:local('thmanyah serif display Bold'),local('thmanyahserifdisplay-Bold');font-weight:700 900;font-display:swap}
+/* Thmanyah webfonts supplied by the project owner; used for Arabic and Latin text. */
+@font-face{font-family:Thmanyah;src:local('thmanyah sans Regular'),local('thmanyahsans-Regular'),url('../fonts/thmanyahsans-Regular.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:Thmanyah;src:local('thmanyah sans Medium'),local('thmanyahsans-Medium'),url('../fonts/thmanyahsans-Medium.woff2') format('woff2');font-weight:500 600;font-display:swap}
+@font-face{font-family:Thmanyah;src:local('thmanyah sans Bold'),local('thmanyahsans-Bold'),url('../fonts/thmanyahsans-Bold.woff2') format('woff2');font-weight:700 800;font-display:swap}
+@font-face{font-family:Thmanyah;src:local('thmanyah sans Black'),local('thmanyahsans-Black'),url('../fonts/thmanyahsans-Black.woff2') format('woff2');font-weight:900;font-display:swap}
+@font-face{font-family:'Thmanyah Display';src:local('thmanyah serif display Bold'),local('thmanyahserifdisplay-Bold'),url('../fonts/thmanyahserifdisplay-Bold.woff2') format('woff2');font-weight:700 900;font-display:swap}
 :root{--bg:#f4f0e8;--panel:#fcfaf6;--ink:#242321;--muted:#706b64;--line:#d9d3c8;--accent:#aa3525;--soft:#eee7dc;--input:#f4f0e8;--shadow:none;--warm:#e56445;--brand:#f57455}
 [data-theme=dark]{--bg:#1b1a18;--panel:#242320;--ink:#f3ede2;--muted:#bbb3a7;--line:#46413a;--accent:#ff987b;--soft:#353029;--input:#1e1d1a;--shadow:none;--brand:#f57455}
 body{font-family:Thmanyah,Arial,sans-serif;line-height:1.8}
