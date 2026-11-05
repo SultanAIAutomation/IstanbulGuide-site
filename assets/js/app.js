@@ -36,7 +36,7 @@ function updateDates(){const ds=dateState();$('dateError').textContent=ds.valid?
   const hotelURL=new URL('https://www.booking.com/searchresults.html');hotelURL.search=new URLSearchParams({ss:'Istanbul, Turkey',checkin:dep,checkout:$('returnDate').value,group_adults:Math.max(1,n('adults')),group_children:Math.max(0,n('children'))+Math.max(0,n('infants')),no_rooms:Math.max(1,n('rooms'))}).toString();document.querySelectorAll('#childAges input').forEach(el=>hotelURL.searchParams.append('age',el.value));for(let i=0;i<Math.min(10,n('infants'));i++)hotelURL.searchParams.append('age','1');$('hotelSearch').href=hotelURL.href;return ds;
 }
 // Pure budget calculation. Monetary inputs other than flight/documents/MED transfers use the chosen local currency.
-function collectBudget(ds){const v={};document.querySelectorAll('#trip input[type=number],#budget input[type=number]').forEach(el=>v[el.id]=Number(el.value));v.nights=ds.nights;v.costCurrency=$('costCurrency').value;v.exchangeRate=n('exchangeRate');v.tours=places.reduce((sum,p)=>sum+($('pick-'+p.id).checked?n('adults')*n('adult-'+p.id)+n('children')*n('child-'+p.id)+n('infants')*n('infant-'+p.id):0),0);return v;}
+function collectBudget(ds){const v={};document.querySelectorAll('#trip input[type=number],#budget input[type=number]').forEach(el=>v[el.id]=Number(el.value));v.groupFlightFare=$('groupFlightFare').value===''?($('manualFlightPending').checked?0:null):n('groupFlightFare');v.nights=ds.nights;v.costCurrency=$('costCurrency').value;v.exchangeRate=n('exchangeRate');v.tours=places.reduce((sum,p)=>sum+($('pick-'+p.id).checked?n('adults')*n('adult-'+p.id)+n('children')*n('child-'+p.id)+n('infants')*n('infant-'+p.id):0),0);return v;}
 function validationError(ds) {
   const fields=[...document.querySelectorAll('#trip input[type=number],#budget input[type=number]')];
   places.filter(p=>$('pick-'+p.id).checked).forEach(p=>fields.push($('adult-'+p.id),$('child-'+p.id),$('infant-'+p.id)));
@@ -45,7 +45,7 @@ function validationError(ds) {
     ['departure','returnDate'].forEach(id=>{$(id).setAttribute('aria-invalid','true');$(id).setAttribute('aria-describedby','dateError');});
     return ds.message;
   }
-  const bad=fields.find(el=>el.value.trim()===''||!el.checkValidity()||!Number.isFinite(Number(el.value)));
+  const bad=fields.find(el=>(el.id!=='groupFlightFare'||el.value!=='')&&el.value.trim()===''||!el.checkValidity()||!Number.isFinite(Number(el.value)));
   if(bad) {
     bad.setAttribute('aria-invalid','true');bad.setAttribute('aria-describedby','budgetError');
     return 'راجع خانة «'+(document.querySelector('label[for="'+bad.id+'"]')?.textContent.trim()||'السعر')+'»؛ أدخل رقماً ضمن الحدود المحددة.';
@@ -98,7 +98,7 @@ function renderPlan(ds) {
   }).join('') + (unscheduled.length?`<div class="unscheduled" role="status"><strong>${nf.format(unscheduled.length)} تجارب لم تتسع لها الأيام المعروضة</strong><p>${unscheduled.map(p=>escapeHTML(p.name)).join('، ')}</p><p>مدّد البرنامج أو الرحلة، أو اختر وتيرة نشطة، أو قلّل المختارات. تبقى تذاكر هذه التجارب ضمن الميزانية حتى تلغي اختيارها.</p></div>`:'');
 }
 
-function update(){if(n('capacity')>0&&n('adults')>=1&&$('autoRooms').checked)$('rooms').value=Math.ceil((n('adults')+Math.max(0,n('children')))/n('capacity'));const ds=updateDates();updateSummary(ds);if(!ds.valid){$('summaryDates').textContent='بانتظار تواريخ صحيحة';$('flightDatesSearch').href=$('flightSearch').href='https://www.google.com/travel/flights?hl=ar&curr=SAR';$('hotelSearch').href='https://www.booking.com/';}renderPlan(ds);updateHotels(ds);filterPlaces();updateUnits();save();}
+function update(){if(n('capacity')>0&&n('adults')>=1&&$('autoRooms').checked)$('rooms').value=Math.ceil((n('adults')+Math.max(0,n('children')))/n('capacity'));const ds=updateDates();updateSummary(ds);if(!ds.valid){$('summaryDates').textContent='بانتظار تواريخ صحيحة';$('flightDatesSearch').href=$('flightSearch').href='https://www.google.com/travel/flights?hl=ar&curr=SAR';$('hotelSearch').href='https://www.booking.com/';}renderPlan(ds);updateHotels(ds);filterPlaces();updateUnits();updateCalculatorIdentity();save();}
 function changeCurrency(){const next=$('costCurrency').value;if(next===currency)return;const rate=n('exchangeRate');if(!(rate>0&&$('exchangeRate').checkValidity())){$('costCurrency').value=currency;notify('أدخل سعر صرف صحيحاً قبل تغيير عملة البنود.');return;}const multiplier=next==='TRY'?rate:1/rate;const ids=[...localPriceIds,...places.flatMap(p=>['adult-'+p.id,'child-'+p.id,'infant-'+p.id])];if(ids.some(id=>$(id).value===''||!$(id).checkValidity())){$('costCurrency').value=currency;notify('صحح مبالغ الإقامة والمصروفات والمزارات قبل تحويل العملة.');return;}ids.forEach(id=>$(id).value=(n(id)*multiplier).toFixed(2));currency=next;update();}
 function applyTheme(theme){document.documentElement.dataset.theme=theme;$('themeToggle').setAttribute('aria-label',theme==='dark'?'تفعيل الوضع الفاتح':'تفعيل الوضع الداكن');$('themeToggle').setAttribute('aria-pressed',String(theme==='dark'));}
 function printPlan() {
@@ -114,6 +114,29 @@ function printPlan() {
   try { window.print(); } finally { restore(); }
 }
 
+function updateCalculatorIdentity(){
+  const pending=$('manualFlightPending').checked&&$('groupFlightFare').value==='';
+  $('manualCalculatorLabel').textContent=$('manualBudgetEdited').checked?(pending?'الحاسبة اليدوية — خطة مطبقة؛ الطيران ناقص':'الحاسبة اليدوية — مدخلاتك'):'الحاسبة اليدوية — قيم افتراضية';
+  if(pending){$('budgetStatus').textContent='المجموع المتاح فقط؛ تكلفة طيران المجموعة غير مدخلة. أدخلها في خانة طيران المجموعة.';$('totalTry').textContent='المجموع المتاح لا يشمل الطيران';}
+}
+function applyGeneratedPlanToCalculator(plan,result){
+  const input=result.input_summary,a=result.budget_assumptions||{},b=plan.budget,people=input.adults+input.children,days=plan.route.days.length;
+  $('departure').value=input.departure;$('returnDate').value=input.returnDate;
+  for(const id of ['adults','children','infants','rooms'])$(id).value=input[id];
+  renderAges(Object.fromEntries((input.childAges||[]).map((age,i)=>['age-'+i,age])));
+  $('autoRooms').checked=false;$('costCurrency').value='SAR';currency='SAR';$('exchangeRate').value=b.exchange_rate;fxMeta={source:'manual'};
+  for(const id of [...localPriceIds,'adultFare','childFare','infantFare','flightExtras','medTransfer','hotelExtras','documentsCost'])$(id).value=0;
+  $('nightRate').value=plan.hotel.nightly_sar;$('foodAdult').value=$('foodChild').value=a.foodDaily??b.components.food.SAR/(people*days);
+  $('transportDaily').value=a.transportDaily??0;$('istTransfer').value=a.transfers??b.components.transport.SAR;
+  $('planExtrasSAR').value=a.extras??b.components.extras.SAR;$('fxFee').value=b.fx_fee_percent;$('reserve').value=b.reserve_percent;
+  $('groupFlightFare').value='';$('manualFlightPending').checked=true;$('manualBudgetEdited').checked=true;
+  for(const place of places){$('pick-'+place.id).checked=false;for(const type of ['adult','child','infant'])$(type+'-'+place.id).value=0;}
+  for(const stop of plan.route.days.flatMap(d=>d.stops)){const pick=$('pick-'+stop.id);if(!pick)continue;pick.checked=true;const price=(Math.round(stop.ticket_try/b.exchange_rate*100)/100).toFixed(2);$('adult-'+stop.id).value=$('child-'+stop.id).value=price;}
+  $('pace').value=input.pace;$('planLength').value='auto';$('autoDays').checked=true;updateFxUI();update();$('groupFlightFare').focus();
+  notify('طُبقت تكاليف الخطة؛ أدخل طيران المجموعة يدوياً لإكمال الإجمالي.');
+}
+document.addEventListener('input',event=>{if(event.target.matches('[data-save]')&&!event.target.closest('#generateForm')){$('manualBudgetEdited').checked=true;if(event.target.id==='groupFlightFare')$('manualFlightPending').checked=event.target.value==='';updateCalculatorIdentity();}});
+document.addEventListener('change',event=>{if(event.target.matches('select[data-save],input[type=checkbox][data-save]')){$('manualBudgetEdited').checked=true;updateCalculatorIdentity();}});
 function init(){renderHotels();renderPlaces();const saved=safeLoad();$('departure').min=todayISO();$('departure').value=addDays(todayISO(),60);$('returnDate').value=addDays(todayISO(),67);defaultFields=captureSnapshot().fields;if(saved?.fields){Object.entries(saved.fields).forEach(([id,value])=>{const el=$(id);if(el?.matches('[data-save]')){if(el.type==='checkbox')el.checked=!!value;else el.value=String(value);}});fxMeta=saved.fxMeta?.source==='api'&&Number.isFinite(saved.fxMeta.updated)&&Number.isFinite(saved.fxMeta.fetched)?saved.fxMeta:null;}renderAges(saved?.fields);currency=$('costCurrency').value;applyTheme((saved?.theme==='dark'?'dark':saved?.theme==='light'?'light':null)||((window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light'));updateFxUI();update();initLibrary();initHotels();
   document.addEventListener('input',e=>{if(e.target.matches('input[data-save]:not([type=checkbox])')){if(e.target.id==='children')renderAges();if(e.target.id==='exchangeRate'){fxMeta={source:'manual'};updateFxUI();}update();}});
   document.addEventListener('change',e=>{const id=e.target.id;if(id==='costCurrency'){changeCurrency();return;}if(id==='hotelClass'){const value={economy:200,family:350,luxury:700}[e.target.value];$('nightRate').value=(value*(currency==='TRY'?n('exchangeRate'):1)).toFixed(2);}if(e.target.matches('select[data-save],input[type=checkbox][data-save]'))update();});

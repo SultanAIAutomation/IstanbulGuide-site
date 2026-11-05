@@ -119,7 +119,7 @@ async function importCurrentPlan(file) {
     const plan = parsePlanFile(JSON.parse(await file.text()));
     // Validate every supplied field on a detached control before changing the page.
     for (const [id,value] of Object.entries(plan.snapshot.fields)) {
-      const original = $(id) || (/^age-\d{1,2}$/.test(id) ? Object.assign(document.createElement('input'), {type:'number',min:'2',max:'11',step:'1'}) : null);
+      const original = $(id) || (/^age-\d{1,2}$/.test(id) ? Object.assign(document.createElement('input'), {type:'number',min:'2',max:'17',step:'1'}) : null);
       if (original && /^age-\d{1,2}$/.test(id)) original.setAttribute('data-save','');
       if (!original?.matches('[data-save]')) continue;
       if (original.type === 'checkbox') {
@@ -130,7 +130,7 @@ async function importCurrentPlan(file) {
       clone.readOnly = false;
       if (clone.type === 'date') clone.removeAttribute('min');
       clone.value = String(value);
-      const optionalEmptyRate = value === '' && ((id === 'exchangeRate' && plan.snapshot.fields.costCurrency !== 'TRY') || id === 'selectedHotel' || id.startsWith('hotelquote-'));
+      const optionalEmptyRate = value === '' && ((id === 'exchangeRate' && plan.snapshot.fields.costCurrency !== 'TRY') || id === 'selectedHotel' || id === 'groupFlightFare' || id.startsWith('hotelquote-'));
       if ((!clone.value && !optionalEmptyRate) || !clone.checkValidity()) throw new Error('يحتوي الملف على قيمة غير صحيحة في «' + id + '».');
     }
     restored = true;

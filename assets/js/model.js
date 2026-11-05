@@ -5,16 +5,37 @@ function calculateBudget(v) {
   const people = v.adults + v.children + v.infants;
   const paying = v.adults + v.children;
   const rate = v.costCurrency === 'TRY' ? 1 / v.exchangeRate : 1;
-  const flight = v.adults * v.adultFare + v.children * v.childFare + v.infants * v.infantFare + v.flightExtras;
+  const flight = Number.isFinite(v.groupFlightFare) ? v.groupFlightFare : v.adults * v.adultFare + v.children * v.childFare + v.infants * v.infantFare + v.flightExtras;
   const hotel = (v.nights * v.rooms * v.nightRate + v.hotelExtras) * rate;
   const daily = (v.adults * v.foodAdult + v.children * v.foodChild + paying * v.transportDaily + paying * v.activityDaily) * rate;
   const expenses = daily * v.expenseDays + (v.cardFee + v.simPrice * v.simCount + v.shopping + v.istTransfer + v.infantExtras + v.otherLocal) * rate + v.medTransfer;
   const tours = v.tours * rate;
   const fxFees = (hotel + expenses - v.medTransfer + tours) * v.fxFee / 100;
-  const subtotal = flight + hotel + expenses + tours + v.documentsCost + fxFees;
+  const subtotal = flight + hotel + expenses + tours + v.documentsCost + (v.planExtrasSAR||0) + fxFees;
   const reserve = subtotal * v.reserve / 100;
   const total = subtotal + reserve;
   return {people, flight, hotel, expenses, daily, tours, fxFees, subtotal, reserve, total, perPerson: total / people};
+}
+
+// Same integer-cent order as the Worker. Reprice locally without a paid /plan call.
+function recalculateGeneratedBudget(original,changes={}) {
+  const b=JSON.parse(JSON.stringify(original)),cents=n=>Math.round(n*100),rate=b.exchange_rate;
+  const money=(n,evidence)=>({SAR:n===null?null:n/100,TRY:n===null?null:Math.round(n*rate)/100,evidence});
+  if(Object.hasOwn(changes,'groupFlightFare')){
+    const fare=changes.groupFlightFare;if(fare!==null&&(!Number.isFinite(fare)||fare<0||fare>1000000))throw Error('invalid_fare');
+    b.components.flights=money(fare===null?null:cents(fare),{source:fare===null?'طيران المجموعة غير مدخل':'مدخل من المستخدم',freshness:'user-entered',fetched_at:new Date().toISOString(),verified:false,price_basis:'group'});
+  }
+  if(changes.addedTicketSAR)b.components.attractions=money(cents(b.components.attractions.SAR)+cents(changes.addedTicketSAR),b.components.attractions.evidence);
+  const local=['stay','food','transport','attractions'].reduce((n,key)=>n+cents(b.components[key].SAR),0);
+  b.components.fx_fee=money(Math.round(local*b.fx_fee_percent/100),b.components.fx_fee.evidence);
+  const subtotal=Object.entries(b.components).filter(([key])=>key!=='reserve').reduce((n,[,m])=>n+(m.SAR===null?0:cents(m.SAR)),0);
+  b.components.reserve=money(Math.round(subtotal*b.reserve_percent/100),b.components.reserve.evidence);
+  const known=subtotal+cents(b.components.reserve.SAR),converted=Object.values(b.components).reduce((n,m)=>n+(m.TRY===null?0:cents(m.TRY)),0)/100;
+  b.complete=b.components.flights.SAR!==null;b.known_total=money(known,b.known_total.evidence);b.known_total.TRY=converted;
+  b.total=money(b.complete?known:null,b.total.evidence);if(b.complete)b.total.TRY=converted;
+  b.difference=b.complete?money(known-cents(b.target.SAR),{source:'حساب حتمي بعد التعديل',freshness:'derived',verified:false}):null;
+  if(b.difference)b.difference.TRY=(cents(converted)-cents(b.target.TRY))/100;
+  return b;
 }
 
 const placeSchedule = {
@@ -82,5 +103,5 @@ function parsePlanFile(value) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {calculateBudget, schedulePlaces, parsePlanFile};
+  module.exports = {calculateBudget, schedulePlaces, parsePlanFile,recalculateGeneratedBudget};
 }
