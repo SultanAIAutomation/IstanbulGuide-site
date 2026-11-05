@@ -30,7 +30,7 @@ const placeSchedule = {
 
 function schedulePlaces(selected, days, pace, fullTrip = true) {
   const limit = pace === 'active' ? 8 : 6;
-  const itinerary = Array.from({length: days}, (_, index) => ({index, places: [], hours: 0, area: ''}));
+  const itinerary = Array.from({length: days}, (_, index) => ({index, places: [], hours: 0, area: '',lightDay:days>=8&&index%4===3,breakMinutes:45}));
   const last = fullTrip ? days - 1 : days;
   const slots = itinerary.slice(1, last);
   const groups = new Map();
@@ -43,7 +43,8 @@ function schedulePlaces(selected, days, pace, fullTrip = true) {
   for (const [area, group] of groups) {
     for (const place of group) {
       const fullDay = place.hours >= 8;
-      const day = slots.find(day => (!day.area || day.area === area) &&
+      const day = slots.find(day => (!day.area || day.area === area) && day.places.length<3 && (!day.lightDay || (!day.places.length&&place.hours<=3)) &&
+        !(fullDay&&slots.some(other=>Math.abs(other.index-day.index)===1&&other.hours>=8)) &&
         (!day.places.length || (!fullDay && day.hours + place.hours <= limit && day.hours < 8)));
       if (!day) { unscheduled.push(place); continue; }
       day.area = area;

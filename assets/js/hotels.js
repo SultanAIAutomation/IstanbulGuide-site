@@ -67,7 +67,7 @@ function updateHotels(ds) {
     document.querySelector('[data-hotel-booking="'+hotel.id+'"]').href=hotelBookingURL(hotel.english+' Istanbul',ds);
     const google=new URL('https://www.google.com/travel/hotels');
     google.searchParams.set('hl','ar');google.searchParams.set('curr','SAR');
-    google.searchParams.set('q',hotel.english+' Istanbul'+(ds.valid?' '+$('departure').value+' '+$('returnDate').value:'')+' '+n('adults')+' adults '+n('children')+' children');
+    google.searchParams.set('q',hotel.english+' Istanbul'+(ds.valid?' '+$('departure').value+' '+$('returnDate').value:'')+' '+n('adults')+' adults '+n('children')+' children ages '+[...document.querySelectorAll('#childAges input')].map(el=>el.value).join(', ')+' '+n('rooms')+' rooms');
     document.querySelector('[data-hotel-google="'+hotel.id+'"]').href=google.href;
     const hasQuote=input.value!==''&&input.checkValidity()&&hotelQuoteCurrent(hotel.id);
     card.style.order=String(index);
