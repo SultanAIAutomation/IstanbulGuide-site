@@ -76,6 +76,21 @@ function schedulePlaces(selected, days, pace, fullTrip = true) {
   return {itinerary, unscheduled};
 }
 
+function parseAppliedItinerary(value){
+  if(value==null)return null;
+  const invalid=()=>{throw new Error('بيانات الجدول المطبق غير صالحة.');};
+  if(typeof value!=='object'||typeof value.context!=='string'||value.context.length>1500||!Array.isArray(value.days)||value.days.length<2||value.days.length>31)invalid();
+  const seen=new Set();
+  const days=value.days.map((day,i)=>{
+    if(!day||typeof day.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(day.date)||!Number.isFinite(Date.parse(day.date))||new Date(day.date).toISOString().slice(0,10)!==day.date||!Array.isArray(day.ids)||day.ids.length>3||typeof day.light_day!=='boolean'||!Number.isFinite(day.visit_min)||day.visit_min<0||day.visit_min>1440)invalid();
+    if(i&&Date.parse(day.date)-Date.parse(value.days[i-1].date)!==86400000)invalid();
+    for(const id of day.ids){if(!Object.hasOwn(placeSchedule,id)||seen.has(id))invalid();seen.add(id);}
+    return {date:day.date,ids:[...day.ids],visit_min:day.visit_min,light_day:day.light_day};
+  });
+  if(days[0].ids.length||days.at(-1).ids.length)invalid();
+  return {context:value.context,days};
+}
+
 function parsePlanFile(value) {
   if (!value || value.format !== 'istanbul-trip' || value.version !== 1 ||
       !value.snapshot || !value.snapshot.fields || typeof value.snapshot.fields !== 'object' || Array.isArray(value.snapshot.fields)) {
@@ -95,6 +110,7 @@ function parsePlanFile(value) {
     name: typeof value.name === 'string' ? value.name.trim().slice(0, 60) || 'خطة مستوردة' : 'خطة مستوردة',
     snapshot: {
       fields,
+      appliedItinerary:parseAppliedItinerary(value.snapshot.appliedItinerary),
       theme: value.snapshot.theme === 'dark' ? 'dark' : 'light',
       // Imported exchange rates are treated as manual, rather than trusted API data.
       fxMeta: {source: 'manual'}
@@ -103,5 +119,5 @@ function parsePlanFile(value) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {calculateBudget, schedulePlaces, parsePlanFile,recalculateGeneratedBudget};
+  module.exports = {calculateBudget, schedulePlaces, parsePlanFile,recalculateGeneratedBudget,parseAppliedItinerary};
 }

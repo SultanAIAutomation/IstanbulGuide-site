@@ -15,9 +15,10 @@ function dayDiff(a,b){return Math.round((parseDate(b)-parseDate(a))/86400000);}
 function displayDate(s){return dateFmt.format(parseDate(s));}
 function n(id){return Number($(id).value);}
 function safeLoad(){try{const s=localStorage.getItem(STORAGE_KEY);return s?JSON.parse(s):null;}catch{return null;}}
-function save(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{const fields={};document.querySelectorAll('[data-save]').forEach(el=>fields[el.id]=el.type==='checkbox'?el.checked:el.value);localStorage.setItem(STORAGE_KEY,JSON.stringify({fields,fxMeta,theme:document.documentElement.dataset.theme}));$('savedStatus').textContent='✓ حُفظت خطتك على هذا الجهاز';}catch{storageAvailable=false;$('savedStatus').textContent='الحفظ غير متاح؛ احتفظ بنسخة PDF';}},200);}
+function save(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{const fields={};document.querySelectorAll('[data-save]').forEach(el=>fields[el.id]=el.type==='checkbox'?el.checked:el.value);localStorage.setItem(STORAGE_KEY,JSON.stringify({fields,fxMeta,theme:document.documentElement.dataset.theme,appliedItinerary:parseAppliedItinerary(appliedItinerary)}));$('savedStatus').textContent='✓ حُفظت خطتك على هذا الجهاز';}catch{storageAvailable=false;$('savedStatus').textContent='الحفظ غير متاح؛ احتفظ بنسخة PDF';}},200);}
 function notify(msg){$('toast').textContent=msg;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,3500);}
 function mapURL(q){return 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q);}
+function appliedItineraryContext(selected){return JSON.stringify([$('departure').value,$('returnDate').value,$('pace').value,n('adults'),n('children'),n('infants'),[...document.querySelectorAll('#childAges input')].map(el=>Number(el.value)),selected.map(p=>p.id).sort()]);}
 function renderPlaces(){
   $('attractions').innerHTML=places.map(p=>`<article class="place" id="place-${p.id}" data-category="${p.category}"><div class="place-top"><span class="place-symbol" aria-hidden="true">${p.symbol}</span><span class="badge">${p.free?'دون تذكرة · الجولة الخارجية':p.indoor?'داخلي / مختلط':'نشاط خارجي'}</span></div><div class="place-body"><label><input id="pick-${p.id}" type="checkbox" data-save> ${p.name}</label><div class="place-meta">${p.area} · ${p.duration}</div><p>${p.description}</p><div class="place-prices" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div><label for="adult-${p.id}">بالغ <span class="local-unit"></span></label><input id="adult-${p.id}" type="number" min="0" max="1000000" step="0.01" value="${p.adult}" data-save></div><div><label for="child-${p.id}">طفل</label><input id="child-${p.id}" type="number" min="0" max="1000000" step="0.01" value="${p.child}" data-save></div><div><label for="infant-${p.id}">رضيع</label><input id="infant-${p.id}" type="number" min="0" max="1000000" step="0.01" value="${p.infant}" data-save></div></div><small>${p.free?'الطعام والنقل والمشتريات منفصلة.':'قيم توضيحية قابلة للتعديل، وليست أسعاراً حية.'}</small><div class="place-footer no-print"><a class="text-link" href="${mapURL(p.map)}" target="_blank" rel="noopener noreferrer">الخريطة ↗</a><a class="text-link" href="${p.url||'https://www.getyourguide.com/s/?q='+encodeURIComponent(p.query||p.map)}" target="_blank" rel="noopener noreferrer">${p.url?'المعلومات / التذاكر':'بحث الجولات'} ↗</a></div></div></article>`).join('');
   $('checks').innerHTML=checkItems.map((t,i)=>`<label class="check-item"><input type="checkbox" id="check-${i}" data-save><span>${t}</span></label>`).join('');
@@ -74,13 +75,19 @@ function renderPlan(ds) {
   const budgetError = validationError(ds);
   const key = JSON.stringify([ds, $('departure').value, $('planLength').value, $('pace').value, currency,
     n('exchangeRate'), n('adults'), n('children'), n('infants'),
-    budgetError, selected.map(p => [p.id,n('adult-'+p.id),n('child-'+p.id),n('infant-'+p.id)])]);
+    budgetError,appliedItinerary,appliedItineraryContext(selected),selected.map(p => [p.id,n('adult-'+p.id),n('child-'+p.id),n('infant-'+p.id)])]);
   if (key === planRenderKey) return;
   planRenderKey = key;
   if (!ds.valid) { $('timeline').innerHTML=''; $('planWarning').textContent='اختر تواريخ صحيحة لعرض البرنامج.'; return; }
   const requested = $('planLength').value === 'auto' ? Math.min(ds.days,14) : Number($('planLength').value);
   const days = Math.min(requested,ds.days), fullTrip = days === ds.days;
-  const {itinerary,unscheduled} = schedulePlaces(selected,days,$('pace').value,fullTrip);
+  if(appliedItinerary&&(appliedItinerary.context!==appliedItineraryContext(selected)||appliedItinerary.days[0].date!==$('departure').value||appliedItinerary.days.at(-1).date!==$('returnDate').value)){
+    $('timeline').replaceChildren();$('planWarning').textContent='تغيرت التواريخ أو المسافرون أو الاختيارات أو الوتيرة؛ أعد توليد الخطة وتطبيقها للتحقق من الجدول والإغلاق. بقيت قيم الحاسبة محفوظة.';return;
+  }
+  const {itinerary,unscheduled} = appliedItinerary?(()=>{
+    const itinerary=appliedItinerary.days.slice(0,days).map((day,index)=>({index,places:day.ids.map(id=>selected.find(p=>p.id===id)),hours:day.visit_min/60,area:day.ids.length?placeSchedule[day.ids[0]][0]:'',lightDay:day.light_day,breakMinutes:45}));
+    const shown=new Set(itinerary.flatMap(d=>d.places.map(p=>p.id)));return {itinerary,unscheduled:selected.filter(p=>!shown.has(p.id))};
+  })():schedulePlaces(selected,days,$('pace').value,fullTrip);
   const validBudget = !budgetError;
   const rate = currency === 'TRY' ? 1/n('exchangeRate') : 1;
   const placeCost = p => (n('adults')*n('adult-'+p.id)+n('children')*n('child-'+p.id)+n('infants')*n('infant-'+p.id))*rate;
@@ -133,12 +140,14 @@ function applyGeneratedPlanToCalculator(plan,result){
   $('groupFlightFare').value='';$('manualFlightPending').checked=true;$('manualBudgetEdited').checked=true;
   for(const place of places){$('pick-'+place.id).checked=false;for(const type of ['adult','child','infant'])$(type+'-'+place.id).value=0;}
   for(const stop of plan.route.days.flatMap(d=>d.stops)){const pick=$('pick-'+stop.id);if(!pick)continue;pick.checked=true;const price=(Math.round(stop.ticket_try/b.exchange_rate*100)/100).toFixed(2);$('adult-'+stop.id).value=$('child-'+stop.id).value=price;}
-  $('pace').value=input.pace;$('planLength').value='auto';$('autoDays').checked=true;updateFxUI();update();$('groupFlightFare').focus();
+  $('pace').value=input.pace;$('planLength').value='auto';$('autoDays').checked=true;
+  appliedItinerary=parseAppliedItinerary({context:appliedItineraryContext(places.filter(p=>$('pick-'+p.id).checked)),days:plan.route.days.map(d=>({date:d.date,ids:d.stops.map(s=>s.id),visit_min:d.visit_min,light_day:d.light_day===true}))});
+  updateFxUI();update();$('groupFlightFare').focus();
   notify('طُبقت تكاليف الخطة؛ أدخل طيران المجموعة يدوياً لإكمال الإجمالي.');
 }
 document.addEventListener('input',event=>{if(event.target.matches('[data-save]')&&!event.target.closest('#generateForm')){$('manualBudgetEdited').checked=true;if(event.target.id==='groupFlightFare')$('manualFlightPending').checked=event.target.value==='';updateCalculatorIdentity();}});
 document.addEventListener('change',event=>{if(event.target.matches('select[data-save],input[type=checkbox][data-save]')){$('manualBudgetEdited').checked=true;updateCalculatorIdentity();}});
-function init(){renderHotels();renderPlaces();const saved=safeLoad();$('departure').min=todayISO();$('departure').value=addDays(todayISO(),60);$('returnDate').value=addDays(todayISO(),67);defaultFields=captureSnapshot().fields;if(saved?.fields){Object.entries(saved.fields).forEach(([id,value])=>{const el=$(id);if(el?.matches('[data-save]')){if(el.type==='checkbox')el.checked=!!value;else el.value=String(value);}});fxMeta=saved.fxMeta?.source==='api'&&Number.isFinite(saved.fxMeta.updated)&&Number.isFinite(saved.fxMeta.fetched)?saved.fxMeta:null;}renderAges(saved?.fields);currency=$('costCurrency').value;applyTheme((saved?.theme==='dark'?'dark':saved?.theme==='light'?'light':null)||((window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light'));updateFxUI();update();initLibrary();initHotels();
+function init(){renderHotels();renderPlaces();const saved=safeLoad();try{appliedItinerary=parseAppliedItinerary(saved?.appliedItinerary);}catch{appliedItinerary=null;}$('departure').min=todayISO();$('departure').value=addDays(todayISO(),60);$('returnDate').value=addDays(todayISO(),67);defaultFields=captureSnapshot().fields;if(saved?.fields){Object.entries(saved.fields).forEach(([id,value])=>{const el=$(id);if(el?.matches('[data-save]')){if(el.type==='checkbox')el.checked=!!value;else el.value=String(value);}});fxMeta=saved.fxMeta?.source==='api'&&Number.isFinite(saved.fxMeta.updated)&&Number.isFinite(saved.fxMeta.fetched)?saved.fxMeta:null;}renderAges(saved?.fields);currency=$('costCurrency').value;applyTheme((saved?.theme==='dark'?'dark':saved?.theme==='light'?'light':null)||((window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light'));updateFxUI();update();initLibrary();initHotels();
   document.addEventListener('input',e=>{if(e.target.matches('input[data-save]:not([type=checkbox])')){if(e.target.id==='children')renderAges();if(e.target.id==='exchangeRate'){fxMeta={source:'manual'};updateFxUI();}update();}});
   document.addEventListener('change',e=>{const id=e.target.id;if(id==='costCurrency'){changeCurrency();return;}if(id==='hotelClass'){const value={economy:200,family:350,luxury:700}[e.target.value];$('nightRate').value=(value*(currency==='TRY'?n('exchangeRate'):1)).toFixed(2);}if(e.target.matches('select[data-save],input[type=checkbox][data-save]'))update();});
   document.querySelectorAll('[data-filter]').forEach(btn=>btn.addEventListener('click',()=>{activeFilter=btn.dataset.filter;document.querySelectorAll('[data-filter]').forEach(b=>{b.classList.toggle('active',b===btn);b.setAttribute('aria-pressed',String(b===btn));});filterPlaces();}));

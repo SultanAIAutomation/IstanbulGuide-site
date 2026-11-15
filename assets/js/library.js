@@ -1,7 +1,7 @@
 'use strict';
 
 const LIBRARY_KEY = 'istanbul-plans-v1';
-let savedPlans = [], comparedPlans = new Set(), defaultFields = {};
+let savedPlans = [], comparedPlans = new Set(), defaultFields = {},appliedItinerary=null;
 const escapeHTML = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 
 function captureSnapshot() {
@@ -9,11 +9,12 @@ function captureSnapshot() {
   document.querySelectorAll('[data-save]').forEach(el => {
     fields[el.id] = el.type === 'checkbox' ? el.checked : el.value;
   });
-  return {fields, fxMeta, theme: document.documentElement.dataset.theme};
+  return {fields, fxMeta, theme: document.documentElement.dataset.theme,appliedItinerary:parseAppliedItinerary(appliedItinerary)};
 }
 
 function restoreSnapshot(snapshot) {
   clearTimeout(saveTimer);
+  appliedItinerary=parseAppliedItinerary(snapshot.appliedItinerary);
   const fields = {...defaultFields, ...snapshot.fields};
   for (const [id, value] of Object.entries(fields)) {
     const el = $(id);
@@ -35,14 +36,26 @@ function currentPlanSummary() {
   const ds = dateState(), error = validationError(ds);
   if (error) throw new Error('صحح المدخلات قبل حفظ الخطة: ' + error);
   const result = calculateBudget(collectBudget(ds));
+  const incomplete=$('manualFlightPending').checked&&$('groupFlightFare').value==='';
   return {
-    total:result.total, flight:result.flight, hotel:result.hotel, expenses:result.expenses,
+    total:result.total,flight:incomplete?null:result.flight,complete:!incomplete,missing:incomplete?['flights']:[],hotel:result.hotel,expenses:result.expenses,
     tours:result.tours, reserve:result.reserve, perPerson:result.perPerson,
     departure:$('departure').value, returnDate:$('returnDate').value,
     nights:ds.nights, people:result.people,
     selected:places.filter(p => $('pick-' + p.id).checked).length,
     exchangeRate:n('exchangeRate') || 0
   };
+}
+
+function incompletePlan(plan){return plan.summary.complete===false||(plan.snapshot?.fields?.manualFlightPending===true&&(plan.snapshot.fields.groupFlightFare==null||plan.snapshot.fields.groupFlightFare===''));}
+function comparisonCell(plan,key,money){
+  if(key==='flight'&&incompletePlan(plan))return 'غير مدخل';
+  const value=money?formatMoney(plan.summary[key]):nf.format(plan.summary[key]);
+  return incompletePlan(plan)&&['total','perPerson'].includes(key)?'متاح فقط: '+value:value;
+}
+function comparisonDifference(plan,baseline){
+  if(incompletePlan(plan)||incompletePlan(baseline))return 'غير قابل للمقارنة قبل استكمال الطيران';
+  return plan.summary.total===baseline.summary.total?'—':(plan.summary.total>baseline.summary.total?'+ ':'− ')+formatMoney(Math.abs(plan.summary.total-baseline.summary.total));
 }
 
 function persistLibrary(next) {
@@ -72,7 +85,8 @@ function saveNamedPlan(existingId) {
 function renderLibrary() {
   $('planLibrary').innerHTML = savedPlans.length ? savedPlans.map(plan => `
     <article class="plan-card">
-      <div class="plan-card-head"><h3>${escapeHTML(plan.name)}</h3><b>${formatMoney(plan.summary.total)}</b></div>
+      <div class="plan-card-head"><h3>${escapeHTML(plan.name)}</h3><b>${incompletePlan(plan)?'المتاح فقط: ':''}${formatMoney(plan.summary.total)}</b></div>
+      ${incompletePlan(plan)?'<small class="info">الطيران غير مدخل — الخطة غير مكتملة</small>':''}
       <small>${displayDate(plan.summary.departure)} — ${displayDate(plan.summary.returnDate)} · ${nf.format(plan.summary.people)} مسافرين · ${nf.format(plan.summary.nights)} ليالٍ</small>
       <small>آخر حفظ: ${new Intl.DateTimeFormat('ar-SA',{dateStyle:'short',timeStyle:'short',calendar:'gregory',timeZone:'Asia/Riyadh'}).format(new Date(plan.updated))} · المبلغ وسعر الصرف وقت الحفظ</small>
       <label class="inline-check"><input type="checkbox" data-compare="${escapeHTML(plan.id)}" ${comparedPlans.has(plan.id) ? 'checked' : ''}> مقارنة «${escapeHTML(plan.name)}»</label>
@@ -91,10 +105,9 @@ function renderComparison() {
     ['المسافرون', 'people', false], ['الليالي', 'nights', false],
     ['الطيران', 'flight', true], ['الإقامة', 'hotel', true],
     ['المصروف والتنقلات', 'expenses', true], ['المزارات', 'tours', true],
-    ['الاحتياطي', 'reserve', true], ['الإجمالي', 'total', true], ['متوسط الفرد', 'perPerson', true]
+    ['الاحتياطي', 'reserve', true], ['الإجمالي / المتاح', 'total', true], ['متوسط الفرد', 'perPerson', true]
   ];
-  const baseline = selected[0].summary.total;
-  $('planComparison').innerHTML = `<div class="table-scroll" tabindex="0" role="region" aria-label="جدول مقارنة الخطط"><table class="comparison-table"><caption>مقارنة ${nf.format(selected.length)} خطط · القيم بالريال وقت الحفظ</caption><thead><tr><th scope="col">البند</th>${selected.map(p => `<th scope="col">${escapeHTML(p.name)}</th>`).join('')}</tr></thead><tbody>${rows.map(([label,key,money]) => `<tr class="${key === 'total' ? 'comparison-total' : ''}"><th scope="row">${label}</th>${selected.map(p => `<td>${money ? formatMoney(p.summary[key]) : nf.format(p.summary[key])}</td>`).join('')}</tr>`).join('')}<tr><th scope="row">الفرق عن «${escapeHTML(selected[0].name)}»</th>${selected.map(p => `<td>${p.summary.total === baseline ? '—' : (p.summary.total > baseline ? '+ ' : '− ') + formatMoney(Math.abs(p.summary.total - baseline))}</td>`).join('')}</tr></tbody></table></div><p class="field-hint space">قد تختلف التواريخ والمسافرون وسعر الصرف بين الخطط؛ راجعها قبل المقارنة.</p>`;
+  $('planComparison').innerHTML = `<div class="table-scroll" tabindex="0" role="region" aria-label="جدول مقارنة الخطط"><table class="comparison-table"><caption>مقارنة ${nf.format(selected.length)} خطط · القيم بالريال وقت الحفظ</caption><thead><tr><th scope="col">البند</th>${selected.map(p => `<th scope="col">${escapeHTML(p.name)}</th>`).join('')}</tr></thead><tbody>${rows.map(([label,key,money]) => `<tr class="${key === 'total' ? 'comparison-total' : ''}"><th scope="row">${label}</th>${selected.map(p => `<td>${comparisonCell(p,key,money)}</td>`).join('')}</tr>`).join('')}<tr><th scope="row">الفرق عن «${escapeHTML(selected[0].name)}»</th>${selected.map(p => `<td>${comparisonDifference(p,selected[0])}</td>`).join('')}</tr></tbody></table></div><p class="field-hint space">قد تختلف التواريخ والمسافرون وسعر الصرف بين الخطط؛ راجعها قبل المقارنة.</p>`;
 }
 
 function exportCurrentPlan() {
@@ -154,8 +167,8 @@ function initLibrary() {
       if (!plan || typeof plan.id !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(plan.id) || typeof plan.name !== 'string' || plan.name.length > 60 || !Number.isFinite(plan.updated)) return false;
       try { parsePlanFile({format:'istanbul-trip',version:1,snapshot:plan.snapshot}); } catch { return false; }
       const summary = plan.summary;
-      return summary && ['total','flight','hotel','expenses','tours','reserve','perPerson','nights','people'].every(key => Number.isFinite(summary[key]) && summary[key] >= 0) && parseDate(summary.departure) && parseDate(summary.returnDate);
-    }).slice(0,20) : [];
+      return summary && ['total','hotel','expenses','tours','reserve','perPerson','nights','people'].every(key => Number.isFinite(summary[key]) && summary[key] >= 0) && (incompletePlan(plan)?summary.flight===null||Number.isFinite(summary.flight)&&summary.flight>=0:Number.isFinite(summary.flight)&&summary.flight>=0) && parseDate(summary.departure) && parseDate(summary.returnDate);
+    }).slice(0,20).map(plan=>({...plan,summary:{...plan.summary,complete:!incompletePlan(plan),missing:incompletePlan(plan)?['flights']:[],flight:incompletePlan(plan)?null:plan.summary.flight}})) : [];
   } catch { savedPlans = []; $('libraryStatus').textContent = 'تعذرت قراءة مكتبة الخطط. يمكنك تصدير الخطة الحالية.'; }
   renderLibrary();
   $('saveNamedPlan').addEventListener('click', () => saveNamedPlan());
