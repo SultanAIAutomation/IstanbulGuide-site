@@ -112,19 +112,7 @@ function renderPlan(ds) {
 function update(){if(n('capacity')>0&&n('adults')>=1&&$('autoRooms').checked)$('rooms').value=Math.ceil((n('adults')+Math.max(0,n('children')))/n('capacity'));const ds=updateDates();updateSummary(ds);if(!ds.valid){$('summaryDates').textContent='بانتظار تواريخ صحيحة';$('flightDatesSearch').href=$('flightSearch').href='https://www.google.com/travel/flights?hl=ar&curr=SAR';$('hotelSearch').href='https://www.booking.com/';}renderPlan(ds);filterPlaces();updateUnits();updateCalculatorIdentity();updateAppliedHotelQuote();updateHotels(ds);window.IstanbulPlanner?.updateTripMismatch();save();}
 function changeCurrency(){const next=$('costCurrency').value;if(next===currency)return;const rate=n('exchangeRate');if(!(rate>0&&$('exchangeRate').checkValidity())){$('costCurrency').value=currency;notify('أدخل سعر صرف صحيحاً قبل تغيير عملة البنود.');return;}const multiplier=next==='TRY'?rate:1/rate;const ids=[...localPriceIds,...places.flatMap(p=>['adult-'+p.id,'child-'+p.id,'infant-'+p.id])];if(ids.some(id=>$(id).value===''||!$(id).checkValidity())){$('costCurrency').value=currency;notify('صحح مبالغ الإقامة والمصروفات والمزارات قبل تحويل العملة.');return;}ids.forEach(id=>$(id).value=(n(id)*multiplier).toFixed(2));currency=next;update();}
 function applyTheme(theme){document.documentElement.dataset.theme=theme;$('themeToggle').setAttribute('aria-label',theme==='dark'?'تفعيل الوضع الفاتح':'تفعيل الوضع الداكن');$('themeToggle').setAttribute('aria-pressed',String(theme==='dark'));}
-function printPlan() {
-  update();
-  const ds=dateState(),err=validationError(ds);
-  if(err){notify('صحح المدخلات قبل الطباعة: '+err);focusInvalidField();return;}
-  const hidden=places.filter(p=>$('pick-'+p.id).checked).map(p=>[$('place-'+p.id),$('place-'+p.id).hidden]);
-  const hotelCard=$('hotel-'+$('selectedHotel').value);if(hotelCard)hidden.push([hotelCard,hotelCard.hidden]);
-  const disclosures=[...document.querySelectorAll('details')].map(el=>[el,el.open]);
-  hidden.forEach(([el])=>el.hidden=false);disclosures.forEach(([el])=>el.open=true);
-  $('printedAt').textContent='أُعدّت الخطة: '+new Intl.DateTimeFormat('ar-SA',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Riyadh',calendar:'gregory'}).format(new Date())+' · بتوقيت الرياض';
-  const restore=()=>{hidden.forEach(([el,wasHidden])=>el.hidden=wasHidden);disclosures.forEach(([el,open])=>el.open=open);};
-  window.addEventListener('afterprint',restore,{once:true});
-  try { window.print(); } finally { restore(); }
-}
+function printPlan() { window.IstanbulPrint.open(); }
 
 function updateCalculatorIdentity(){
   $('sumDocs').previousElementSibling.textContent='تأمين / تأشيرة / إضافات المجموعة';

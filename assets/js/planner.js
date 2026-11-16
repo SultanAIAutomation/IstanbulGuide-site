@@ -9,6 +9,7 @@
   function formContext(){return JSON.stringify([...get('generateForm').querySelectorAll('input,select')].map(el=>[el.id||el.value,el.type==='checkbox'?el.checked:el.value]).concat([['exchangeRate',get('exchangeRate').value]]));}
   function isStale(){return lastResult!==null&&resultContext!==formContext();}
   function updateResultValidity(){
+    window.IstanbulPrint?.setGenerated(lastResult,isStale());
     const stale=isStale(),notice=get('generatedStaleNotice');
     if(notice){notice.hidden=!stale;notice.textContent=stale?'تغيرت بيانات الرحلة؛ النتائج أدناه تخص الطلب السابق. أعد التوليد قبل تطبيقها أو تعديلها.':'';}
     get('generatedResults').querySelectorAll('button,input').forEach(el=>{if(el.id!=='useCalculatorFare')el.disabled=stale||el.dataset.accepted==='true';});
@@ -125,6 +126,7 @@
     event.preventDefault();const form=get('generateForm');if(!form.reportValidity())return;
     const notice=get('generatorNotice');notice.textContent='جارٍ البحث والتحقق…';get('generatePlan').disabled=true;get('generatedResults').replaceChildren();get('exportGenerated').hidden=true;lastResult=null;resultContext=null;pendingContext=formContext();
     document.querySelector('.generator-progress').hidden=false;
+    window.IstanbulPrint?.setGenerated(null,false);
     for(const agent of Object.keys(agents))get('agent-'+agent).textContent=agents[agent]+' · بانتظار';
     let timer;const controller=new AbortController();
     try{
