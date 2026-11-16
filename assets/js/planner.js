@@ -17,6 +17,33 @@
   function updatePartySummary(){
     const children=Number(get('genChildren').value),infants=Number(get('genInfants').value),adults=Number(get('genTravelers').value)-children-infants;
     get('generatorPartySummary').textContent=adults+' بالغ · '+children+' طفل · '+infants+' رضيع · أعمار الأطفال: '+(get('genChildAges').value||'لا توجد أعمار مدخلة')+' · الغرف: '+get('genRooms').value+'؛ تأكد من سعة الغرفة مع الفندق.';
+    updateTripMismatch();
+  }
+  function generatorTrip(){
+    const ids=['genDeparture','genReturn','genTravelers','genChildren','genInfants','genRooms'];
+    if(ids.some(id=>get(id).value===''||!get(id).checkValidity()))throw Error('trip');
+    const departure=get('genDeparture').value,returnDate=get('genReturn').value;
+    if(!parseDate(departure)||!parseDate(returnDate)||departure<todayISO()||dayDiff(departure,returnDate)<1||dayDiff(departure,returnDate)>365)throw Error('trip');
+    const children=Number(get('genChildren').value),infants=Number(get('genInfants').value),adults=Number(get('genTravelers').value)-children-infants;
+    const text=get('genChildAges').value.trim().replace(/[\u0660-\u0669]/g,ch=>String(ch.charCodeAt(0)-0x660));
+    const childAges=text?text.split(/[,\u060c]+/).map(s=>s.trim()===''?NaN:Number(s.trim())):[];
+    const pace=get('genPace').value;
+    if(adults<1||infants>adults||childAges.length!==children||childAges.some(age=>!Number.isInteger(age)||age<2||age>17)||!['relaxed','active'].includes(pace))throw Error('trip');
+    return {departure,returnDate,adults,children,infants,childAges,rooms:Number(get('genRooms').value),pace};
+  }
+  function calculatorTrip(){return {departure:get('departure').value,returnDate:get('returnDate').value,adults:Number(get('adults').value),children:Number(get('children').value),infants:Number(get('infants').value),childAges:[...get('childAges').querySelectorAll('input')].map(el=>Number(el.value)),rooms:Number(get('rooms').value),pace:get('pace').value};}
+  function updateTripMismatch(){
+    let matches=false;try{matches=JSON.stringify(generatorTrip())===JSON.stringify(calculatorTrip());}catch{}
+    const notice=get('generatorTripMismatch');notice.hidden=matches;
+    notice.textContent=matches?'':'بيانات المولّد تختلف عن الحاسبة وبحث الفنادق، أو تحتاج تصحيحاً. لن تتغير الحاسبة تلقائياً؛ راجع البيانات ثم استخدم زر المزامنة أدناه. الأسعار السابقة ستبقى للمراجعة والعروض المرتبطة بالرحلة السابقة تحتاج إعادة تأكيد.';
+  }
+  function syncGeneratorTrip(){
+    let trip;try{trip=generatorTrip();}catch{notify('صحح تواريخ المولّد والمسافرين وأعمار الأطفال والغرف قبل المزامنة.');return;}
+    for(const id of ['departure','returnDate','adults','children','infants','rooms','pace'])get(id).value=trip[id];
+    renderAges(Object.fromEntries(trip.childAges.map((age,i)=>['age-'+i,age])));
+    get('autoRooms').checked=false;get('manualBudgetEdited').checked=true;
+    update();updatePartySummary();updateFareTransfer();
+    notify('نُقلت بيانات الرحلة إلى الحاسبة وبحث الفنادق؛ احتُفظ بالأسعار، راجع العروض السابقة وأعد تأكيدها.');
   }
   function matchingManualTrip(){
     if(!lastResult)return false;const input=lastResult.input_summary;
@@ -97,6 +124,7 @@
   async function generate(event){
     event.preventDefault();const form=get('generateForm');if(!form.reportValidity())return;
     const notice=get('generatorNotice');notice.textContent='جارٍ البحث والتحقق…';get('generatePlan').disabled=true;get('generatedResults').replaceChildren();get('exportGenerated').hidden=true;lastResult=null;resultContext=null;pendingContext=formContext();
+    document.querySelector('.generator-progress').hidden=false;
     for(const agent of Object.keys(agents))get('agent-'+agent).textContent=agents[agent]+' · بانتظار';
     let timer;const controller=new AbortController();
     try{
@@ -120,6 +148,8 @@
   get('genChildren').value=get('children').value;get('genInfants').value=get('infants').value;get('genRooms').value=get('rooms').value;
   get('genChildAges').value=[...get('childAges').querySelectorAll('input')].map(el=>el.value).join(', ');
   get('genDeparture').value=get('departure').value;get('genReturn').value=get('returnDate').value;get('genDeparture').min=get('departure').min;
+  get('genPace').value=get('pace').value;
+  get('syncGeneratorTrip').addEventListener('click',syncGeneratorTrip);
   get('genDeparture').addEventListener('change',()=>get('genReturn').min=get('genDeparture').value);
   for(const type of ['input','change'])document.addEventListener(type,event=>{if(event.target.closest('#generateForm')||event.target.id==='exchangeRate'){updatePartySummary();updateResultValidity();}else if(event.target.closest('#trip')||event.target.id==='groupFlightFare')updateFareTransfer();});
   updatePartySummary();
@@ -127,5 +157,5 @@
   get('generateForm').addEventListener('invalid',event=>{const details=event.target.closest('details');if(details)details.open=true;},true);
   get('exportGenerated').addEventListener('click',()=>{if(!lastResult||isStale())return;const url=URL.createObjectURL(new Blob([JSON.stringify(lastResult,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='istanbul-agent-plans.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
   // Testable API; no secrets or raw HTML rendering.
-  window.IstanbulPlanner={render,generate,source,formatDate,setGroupFare,acceptSuggestion};
+  window.IstanbulPlanner={render,generate,source,formatDate,setGroupFare,acceptSuggestion,updateTripMismatch};
 })();

@@ -38,7 +38,7 @@ function currentPlanSummary() {
   const result = calculateBudget(collectBudget(ds));
   const incomplete=$('manualFlightPending').checked&&$('groupFlightFare').value==='';
   return {
-    total:result.total,flight:incomplete?null:result.flight,complete:!incomplete,missing:incomplete?['flights']:[],hotel:result.hotel,expenses:result.expenses,
+    total:result.total,flight:incomplete?null:result.flight,complete:!incomplete,missing:incomplete?['flights']:[],hotel:result.hotel,hotelQuoteStale:appliedHotelQuoteStale(),expenses:result.expenses,
     tours:result.tours, reserve:result.reserve, perPerson:result.perPerson,
     departure:$('departure').value, returnDate:$('returnDate').value,
     nights:ds.nights, people:result.people,
@@ -48,13 +48,16 @@ function currentPlanSummary() {
 }
 
 function incompletePlan(plan){return plan.summary.complete===false||(plan.snapshot?.fields?.manualFlightPending===true&&(plan.snapshot.fields.groupFlightFare==null||plan.snapshot.fields.groupFlightFare===''));}
+function staleHotelPlan(plan){return plan.summary.hotelQuoteStale===true||appliedHotelQuoteStale(plan.snapshot.fields);}
 function comparisonCell(plan,key,money){
   if(key==='flight'&&incompletePlan(plan))return 'غير مدخل';
   const value=money?formatMoney(plan.summary[key]):nf.format(plan.summary[key]);
-  return incompletePlan(plan)&&['total','perPerson'].includes(key)?'متاح فقط: '+value:value;
+  const provisional=staleHotelPlan(plan)&&['hotel','total','perPerson'].includes(key)?'تقديري — الإقامة تحتاج إعادة تأكيد: ':'';
+  return provisional+(incompletePlan(plan)&&['total','perPerson'].includes(key)?'متاح فقط: '+value:value);
 }
 function comparisonDifference(plan,baseline){
   if(incompletePlan(plan)||incompletePlan(baseline))return 'غير قابل للمقارنة قبل استكمال الطيران';
+  if(staleHotelPlan(plan)||staleHotelPlan(baseline))return 'فرق تقديري؛ أعد تأكيد عرض الإقامة قبل الاعتماد عليه';
   return plan.summary.total===baseline.summary.total?'—':(plan.summary.total>baseline.summary.total?'+ ':'− ')+formatMoney(Math.abs(plan.summary.total-baseline.summary.total));
 }
 
@@ -77,7 +80,7 @@ function saveNamedPlan(existingId) {
       name:name.slice(0,60), updated:Date.now(), snapshot:captureSnapshot(), summary
     };
     persistLibrary(existing ? savedPlans.map(p => p.id === existing.id ? plan : p) : [...savedPlans, plan]);
-    $('libraryStatus').textContent = 'حُفظت «' + plan.name + '». تعديلاتك التالية لا تغيّر النسخة إلا عند تحديثها.';
+    $('libraryStatus').textContent = 'حُفظت «' + plan.name + '». تعديلاتك التالية لا تغيّر النسخة إلا عند تحديثها.'+(summary.hotelQuoteStale?' '+oldHotelQuoteWarning:'');
     notify(existing ? 'تم تحديث الخطة المحفوظة.' : 'أُضيفت الخطة إلى مكتبتك.');
   } catch (error) { notify(error.message); focusInvalidField(); }
 }
@@ -85,7 +88,8 @@ function saveNamedPlan(existingId) {
 function renderLibrary() {
   $('planLibrary').innerHTML = savedPlans.length ? savedPlans.map(plan => `
     <article class="plan-card">
-      <div class="plan-card-head"><h3>${escapeHTML(plan.name)}</h3><b>${incompletePlan(plan)?'المتاح فقط: ':''}${formatMoney(plan.summary.total)}</b></div>
+      <div class="plan-card-head"><h3>${escapeHTML(plan.name)}</h3><b>${staleHotelPlan(plan)?'إجمالي تقديري: ':''}${incompletePlan(plan)?'المتاح فقط: ':''}${formatMoney(plan.summary.total)}</b></div>
+      ${staleHotelPlan(plan)?'<small class="info">'+oldHotelQuoteWarning+'</small>':''}
       ${incompletePlan(plan)?'<small class="info">الطيران غير مدخل — الخطة غير مكتملة</small>':''}
       <small>${displayDate(plan.summary.departure)} — ${displayDate(plan.summary.returnDate)} · ${nf.format(plan.summary.people)} مسافرين · ${nf.format(plan.summary.nights)} ليالٍ</small>
       <small>آخر حفظ: ${new Intl.DateTimeFormat('ar-SA',{dateStyle:'short',timeStyle:'short',calendar:'gregory',timeZone:'Asia/Riyadh'}).format(new Date(plan.updated))} · المبلغ وسعر الصرف وقت الحفظ</small>
@@ -143,7 +147,7 @@ async function importCurrentPlan(file) {
       clone.readOnly = false;
       if (clone.type === 'date') clone.removeAttribute('min');
       clone.value = String(value);
-      const optionalEmptyRate = value === '' && ((id === 'exchangeRate' && plan.snapshot.fields.costCurrency !== 'TRY') || id === 'selectedHotel' || id === 'groupFlightFare' || id.startsWith('hotelquote-'));
+      const optionalEmptyRate = value === '' && ((id === 'exchangeRate' && plan.snapshot.fields.costCurrency !== 'TRY') || id === 'selectedHotel' || id === 'appliedHotelQuote' || id === 'groupFlightFare' || id.startsWith('hotelquote-'));
       if ((!clone.value && !optionalEmptyRate) || !clone.checkValidity()) throw new Error('يحتوي الملف على قيمة غير صحيحة في «' + id + '».');
     }
     restored = true;

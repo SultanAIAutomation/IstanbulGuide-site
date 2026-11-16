@@ -101,7 +101,7 @@ function parsePlanFile(value) {
   if (entries.length > 400) throw new Error('يحتوي الملف على حقول أكثر من الحد المسموح.');
   for (const [id, field] of entries) {
     if (!/^[a-zA-Z][a-zA-Z0-9-]{0,70}$/.test(id) ||
-        !['string', 'boolean', 'number'].includes(typeof field) || String(field).length > 200) {
+        !['string', 'boolean', 'number'].includes(typeof field) || String(field).length > (id==='appliedHotelQuote'?512:200)) {
       throw new Error('يحتوي ملف الخطة على بيانات غير صالحة.');
     }
     fields[id] = field;

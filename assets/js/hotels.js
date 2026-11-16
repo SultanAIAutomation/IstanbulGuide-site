@@ -42,8 +42,39 @@ function hotelBookingURL(query, ds) {
   return url.href;
 }
 
-function hotelQuoteContext() {
-  return JSON.stringify(['departure','returnDate','adults','children','infants','rooms'].map(id=>$(id).value).concat([...document.querySelectorAll('#childAges input')].map(el=>el.value)));
+function hotelQuoteContext(fields) {
+  const value=id=>String(fields?fields[id]??'':$(id).value);
+  const ages=fields?Array.from({length:Math.max(0,Math.min(20,Number(fields.children)||0))},(_,i)=>value('age-'+i)):[...document.querySelectorAll('#childAges input')].map(el=>el.value);
+  return JSON.stringify(['departure','returnDate','adults','children','infants','rooms'].map(value).concat(ages));
+}
+
+const oldHotelQuoteWarning='تقدير قديم للإقامة يحتاج إعادة تأكيد؛ احتُفظ بالسعر للمراجعة، والإجمالي تقديري حتى تراجع العرض لتواريخك وإشغالك الحاليين.';
+function appliedHotelQuoteStale(fields) {
+  const value=id=>fields?fields[id]:$(id).value;
+  if(!value('selectedHotel'))return false;
+  try{
+    const quote=JSON.parse(value('appliedHotelQuote'));
+    const rate=value('costCurrency')==='TRY'?Number(value('exchangeRate')):1;
+    return quote.pending===true||quote.context!==hotelQuoteContext(fields)||!Number.isFinite(quote.nightlySAR)||!(rate>0)||Math.abs(Number(value('nightRate'))/rate-quote.nightlySAR)>.011;
+  }catch{return true;}
+}
+function validHotelContext(){
+  return dateState().valid&&['adults','children','infants','rooms'].every(id=>$(id).value!==''&&$(id).checkValidity())&&n('infants')<=n('adults')&&
+    document.querySelectorAll('#childAges input').length===n('children')&&[...document.querySelectorAll('#childAges input')].every(el=>el.value!==''&&el.checkValidity());
+}
+function confirmAppliedHotelQuote(){
+  $('appliedHotelQuote').value=JSON.stringify({context:hotelQuoteContext(),nightlySAR:n('nightRate')/(currency==='TRY'?n('exchangeRate'):1),pending:false});
+}
+function updateAppliedHotelQuote(){
+  const stale=appliedHotelQuoteStale();
+  if(stale){
+    // Latch the warning: returning to the old dates alone does not reconfirm a reviewed offer.
+    let quote;try{quote=JSON.parse($('appliedHotelQuote').value);}catch{}
+    $('appliedHotelQuote').value=JSON.stringify({...quote,pending:true});
+  }
+  for(const id of ['hotelRateWarning','hotelSummaryWarning','hotelTotalWarning']){$(id).hidden=!stale;$(id).textContent=stale?oldHotelQuoteWarning:'';}
+  $('reconfirmHotelQuote').hidden=!stale;
+  if(stale){$('mobileTotal').textContent+=' · تقديري';$('budgetStatus').textContent+=' الإجمالي تقديري؛ عرض الإقامة يحتاج إعادة تأكيد.';}
 }
 
 function hotelQuoteCurrent(id) {
@@ -67,7 +98,7 @@ function updateHotels(ds) {
     document.querySelector('[data-hotel-booking="'+hotel.id+'"]').href=hotelBookingURL(hotel.english+' Istanbul',ds);
     const google=new URL('https://www.google.com/travel/hotels');
     google.searchParams.set('hl','ar');google.searchParams.set('curr','SAR');
-    google.searchParams.set('q',hotel.english+' Istanbul'+(ds.valid?' '+$('departure').value+' '+$('returnDate').value:'')+' '+n('adults')+' adults '+n('children')+' children ages '+[...document.querySelectorAll('#childAges input')].map(el=>el.value).join(', ')+' '+n('rooms')+' rooms');
+    google.searchParams.set('q',hotel.english+' Istanbul'+(ds.valid?' '+$('departure').value+' '+$('returnDate').value:'')+' '+n('adults')+' adults '+n('children')+' children '+n('infants')+' infants; children ages '+[...document.querySelectorAll('#childAges input')].map(el=>el.value).join(', ')+' '+n('rooms')+' rooms');
     document.querySelector('[data-hotel-google="'+hotel.id+'"]').href=google.href;
     const hasQuote=input.value!==''&&input.checkValidity()&&hotelQuoteCurrent(hotel.id);
     card.style.order=String(index);
@@ -87,10 +118,17 @@ function updateHotels(ds) {
   $('hotelRegionSearch').href=hotelBookingURL(region?region.query:'Istanbul Turkey',ds);
   $('hotelSearchContext').textContent=ds.valid?displayDate($('departure').value)+' — '+displayDate($('returnDate').value)+' · '+nf.format(n('adults')+n('children')+n('infants'))+' مسافرين · '+nf.format(n('rooms'))+' غرف. راجع البيانات في موقع الحجز.':'صحح التواريخ قبل المقارنة؛ لن نرسل تواريخ غير صحيحة إلى موقع الحجز.';
   const selected=hotelOptions.find(hotel=>hotel.id===$('selectedHotel').value);
-  $('chosenHotelBudget').textContent=selected?'الفندق في خطتك: '+selected.name+' · تكلفة الإقامة محسوبة من خانة سعر الليلة الحالية.':'';
+  $('chosenHotelBudget').textContent=selected?'الفندق في خطتك: '+selected.name+' · '+(appliedHotelQuoteStale()?oldHotelQuoteWarning:'عرض أدخلته وراجعته لهذه الرحلة؛ ليس حجزاً مؤكداً أو سعراً متحققاً من الفندق.'):'';
 }
 
 function initHotels() {
+  $('reconfirmHotelQuote').addEventListener('click',()=>{
+    if(!validHotelContext()||!$('nightRate').value||!$('nightRate').checkValidity()||!(n('nightRate')>0)||!hotelOptions.some(hotel=>hotel.id===$('selectedHotel').value)||
+      (currency==='TRY'&&!(n('exchangeRate')>0&&$('exchangeRate').checkValidity()))){notify('صحح التواريخ والمسافرين والأعمار والغرف وسعر الليلة والصرف قبل إعادة التأكيد.');return;}
+    confirmAppliedHotelQuote();const id=$('selectedHotel').value;
+    $('hotelquote-'+id).value=JSON.parse($('appliedHotelQuote').value).nightlySAR.toFixed(2);$('hotelquote-context-'+id).value=hotelQuoteContext();
+    update();notify('أعدت تأكيد السعر المدخل للرحلة الحالية بعد مراجعتك؛ لم يُتحقق من السعر أو التوافر لدى الفندق.');
+  });
   document.addEventListener('input',event=>{
     if(event.target.type!=='number'||!event.target.id.startsWith('hotelquote-'))return;
     const id=event.target.id.slice('hotelquote-'.length);
@@ -107,12 +145,13 @@ function initHotels() {
     const id=button.dataset.chooseHotel,input=$('hotelquote-'+id);
     if(!input.value||!input.checkValidity()){notify('أدخل سعر الليلة بالريال من عرض الحجز أولاً.');input.focus();return;}
     if(!hotelQuoteCurrent(id)){notify('بيانات الرحلة تغيرت؛ راجع عرض الفندق ثم أعد إدخال سعره.');input.focus();return;}
-    if(!dateState().valid){notify('صحح تواريخ الرحلة أولاً.');$('departure').focus();return;}
+    if(!validHotelContext()){notify('صحح تواريخ الرحلة والمسافرين والأعمار والغرف أولاً.');return;}
     const rate=currency==='TRY'?n('exchangeRate'):1;
     if(!(rate>0&&Number.isFinite(rate))||(currency==='TRY'&&!$('exchangeRate').checkValidity())){notify('أدخل سعر صرف صحيحاً قبل نقل العرض إلى ميزانيتك بالليرة.');return;}
     const converted=Number(input.value)*rate;
     if(converted>Number($('nightRate').max)){notify('قيمة العرض بعد التحويل تتجاوز الحد المسموح لسعر الليلة.');return;}
     $('nightRate').value=converted.toFixed(2);$('selectedHotel').value=id;
+    confirmAppliedHotelQuote();
     update();notify('أُضيف سعر الفندق إلى الميزانية؛ يمكنك تعديله في خانة سعر الليلة.');
   });
 }

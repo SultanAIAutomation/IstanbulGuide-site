@@ -3,3 +3,6 @@
 .plan-overview{border:1px solid var(--line);padding:12px}.plan-overview .info{margin:6px 0}.agent-report{border-bottom:1px solid var(--line);padding:8px 0}.agent-report summary{cursor:pointer}.agent-report pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.75rem}.suggestions{margin-top:18px}.suggestion{border:1px solid var(--line);padding:12px;margin:10px 0}bdi{unicode-bidi:isolate}#manualCalculatorLabel{color:inherit;font-weight:700}
 
 .plan-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}.plan-choice{border:1px solid var(--line);padding:12px;overflow-wrap:anywhere}.plan-choice h4{margin:0 0 8px}.plan-choice p{margin:8px 0}#generatedStaleNotice:not([hidden]){border:2px solid var(--accent);padding:12px;font-weight:700}#generator button:disabled{opacity:.55;cursor:not-allowed}@media(max-width:750px){.plan-choices{grid-template-columns:1fr}}
+.generator-progress[hidden],#reconfirmHotelQuote[hidden]{display:none!important}
+.summary-top #hotelTotalWarning{color:var(--ink);margin-top:12px}
+#hotelSummaryWarning{grid-column:1/-1}
