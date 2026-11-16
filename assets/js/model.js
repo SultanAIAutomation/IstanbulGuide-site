@@ -49,30 +49,54 @@ const placeSchedule = {
   bursa: ['بورصة', 10], sapanca: ['صبنجة ومعشوقية', 10]
 };
 
-function schedulePlaces(selected, days, pace, fullTrip = true) {
+function schedulePlaces(selected, days, pace, fullTrip = true, departure, rules = typeof module!=='undefined'&&module.exports?require('../../worker/data/attractions.json'):globalThis.IstanbulAttractionRules||[]) {
   const limit = pace === 'active' ? 8 : 6;
-  const itinerary = Array.from({length: days}, (_, index) => ({index, places: [], hours: 0, area: '',lightDay:days>=8&&index%4===3,breakMinutes:45}));
+  const start=/^\d{4}-\d{2}-\d{2}$/.test(departure)?new Date(departure+'T12:00:00Z'):null;
+  const dated=start&&Number.isFinite(start.getTime())&&start.toISOString().slice(0,10)===departure;
+  const itinerary = Array.from({length: days}, (_, index) => ({index,date:dated?new Date(start.getTime()+index*86400000).toISOString().slice(0,10):null, places: [], hours: 0, area: '',lightDay:days>=8&&index%4===3,breakMinutes:45}));
+  const catalog=new Map(rules.map(rule=>[rule.id,rule]));
   const last = fullTrip ? days - 1 : days;
   const slots = itinerary.slice(1, last);
   const groups = new Map();
   selected.forEach(place => {
     const [area, hours] = placeSchedule[place.id] || [place.area, 4];
     if (!groups.has(area)) groups.set(area, []);
-    groups.get(area).push({...place, hours});
+    groups.get(area).push({...place, hours,scheduleRule:catalog.get(place.id)});
   });
-  const unscheduled = [];
-  for (const [area, group] of groups) {
+  const open=(place,day)=>day.date&&Array.isArray(place.scheduleRule?.closed_days)&&!place.scheduleRule.closed_days.includes(new Date(day.date+'T12:00:00Z').getUTCDay());
+  function fits(place,day){
+    const fullDay=place.hours>=8,area=placeSchedule[place.id]?.[0]||place.area;
+    return open(place,day)&&(!day.area||day.area===area)&&day.places.length<3&&
+      (!day.lightDay||(!day.places.length&&place.hours<=3))&&
+      !(fullDay&&slots.some(other=>Math.abs(other.index-day.index)===1&&other.hours>=8))&&
+      (!day.places.length||(!fullDay&&day.hours+place.hours<=limit&&day.hours<8));
+  }
+  const assign=(place,day)=>{day.area=placeSchedule[place.id]?.[0]||place.area;day.hours+=place.hours;day.places.push(place);};
+  for (const group of groups.values()) {
     for (const place of group) {
-      const fullDay = place.hours >= 8;
-      const day = slots.find(day => (!day.area || day.area === area) && day.places.length<3 && (!day.lightDay || (!day.places.length&&place.hours<=3)) &&
-        !(fullDay&&slots.some(other=>Math.abs(other.index-day.index)===1&&other.hours>=8)) &&
-        (!day.places.length || (!fullDay && day.hours + place.hours <= limit && day.hours < 8)));
-      if (!day) { unscheduled.push(place); continue; }
-      day.area = area;
-      day.hours += place.hours;
-      day.places.push(place);
+      const day=slots.find(day=>fits(place,day));
+      if(day)assign(place,day);
     }
   }
+  const all=[...groups.values()].flat(),snapshot=()=>itinerary.map(day=>({...day,places:[...day.places]}));
+  // If a flexible visit took the only open day, try moving visits without
+  // relaxing the existing area, pace, light-day or consecutive-trip limits.
+  let best=snapshot(),bestCount=best.reduce((sum,day)=>sum+day.places.length,0),states=0;
+  if(bestCount<all.length){
+    for(const day of slots){day.places=[];day.hours=0;day.area='';}
+    function search(remaining,count){
+      if(count>bestCount){best=snapshot();bestCount=count;}
+      if(++states>500||bestCount===all.length||count+remaining.length<=bestCount)return;
+      const choices=remaining.map(place=>({place,days:slots.filter(day=>fits(place,day))})).sort((a,b)=>a.days.length-b.days.length);
+      const {place,days:available}=choices[0],rest=remaining.filter(other=>other.id!==place.id);
+      for(const day of available){const hours=day.hours,area=day.area;assign(place,day);search(rest,count+1);day.places.pop();day.hours=hours;day.area=area;if(states>500||bestCount===all.length)break;}
+      if(states<=500)search(rest,count);
+    }
+    search(all,0);
+    itinerary.splice(0,itinerary.length,...best);
+  }
+  const scheduled=new Set(itinerary.flatMap(day=>day.places.map(place=>place.id)));
+  const unscheduled=all.filter(place=>!scheduled.has(place.id)).map(place=>({...place,reason:!dated?'تاريخ بداية البرنامج غير صالح؛ لا يمكن التحقق من الإغلاق.':!Array.isArray(place.scheduleRule?.closed_days)?'قواعد الإغلاق غير متاحة في الدليل؛ راجع المصدر قبل الزيارة.':!slots.length?'لا توجد أيام زيارة بين الوصول والعودة.':!slots.some(day=>open(place,day))?'الإغلاق الأسبوعي في الدليل يشمل كل أيام الزيارة المتاحة.':'لم تتسع الأيام المفتوحة ضمن حدود الوتيرة والمنطقة والأيام الأخف والراحة؛ راجع الإغلاق أو مدّد البرنامج.'}));
   return {itinerary, unscheduled};
 }
 

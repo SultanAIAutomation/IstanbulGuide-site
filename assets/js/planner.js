@@ -157,5 +157,5 @@
   get('generateForm').addEventListener('invalid',event=>{const details=event.target.closest('details');if(details)details.open=true;},true);
   get('exportGenerated').addEventListener('click',()=>{if(!lastResult||isStale())return;const url=URL.createObjectURL(new Blob([JSON.stringify(lastResult,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='istanbul-agent-plans.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
   // Testable API; no secrets or raw HTML rendering.
-  window.IstanbulPlanner={render,generate,source,formatDate,setGroupFare,acceptSuggestion,updateTripMismatch};
+  window.IstanbulPlanner={render,generate,source,formatDate,setGroupFare,acceptSuggestion,updateTripMismatch,updateResultValidity};
 })();
